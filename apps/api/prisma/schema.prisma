@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  preferredLang String    @default("hi")
+  isDeaf        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions      Session[]
+  progress      LearningProgress[]
+  offlineQueue  OfflineQueue[]
+  quizAttempts  QuizAttempt[]
+  streaks       UserStreak?
+
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  language    String   @default("isl")
+  level       String   @default("beginner")
+  order       Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  lessons  Lesson[]
+
+  @@map("modules")
+}
+
+model Lesson {
+  id          String   @id @default(cuid())
+  moduleId    String
+  title       String
+  content     String
+  videoUrl    String?
+  signGloss   String?
+  order       Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  module       Module             @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  progress     LearningProgress[]
+  quizAttempts QuizAttempt[]
+
+  @@map("lessons")
+}
+
+model LearningProgress {
+  id          String    @id @default(cuid())
+  userId      String
+  moduleId    String
+  lessonId    String
+  completed   Boolean   @default(false)
+  score       Int?
+  attempts    Int       @default(0)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleId, lessonId])
+  @@map("learning_progress")
+}
+
+model QuizAttempt {
+  id        String   @id @default(cuid())
+  userId    String
+  lessonId  String
+  score     Int
+  maxScore  Int
+  passed    Boolean
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_attempts")
+}
+
+model UserStreak {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  currentStreak Int      @default(0)
+  longestStreak Int      @default(0)
+  lastActiveAt  DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_streaks")
+}
+
+model OfflineQueue {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  payload   Json
+  synced    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  syncedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("offline_queue")
+}

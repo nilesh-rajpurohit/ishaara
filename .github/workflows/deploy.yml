@@ -1,0 +1,40 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all apps
+        run: pnpm build
+
+      - name: Build Docker images
+        run: |
+          docker build -f infra/docker/web.Dockerfile -t ishaara-web:latest .
+          docker build -f infra/docker/api.Dockerfile -t ishaara-api:latest .
+          docker build -f infra/docker/ml.Dockerfile -t ishaara-ml:latest .
+
+      - name: Deploy
+        run: echo "Wire your cloud provider here — AWS ECS, Railway, Render, your call."

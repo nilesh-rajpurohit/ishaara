@@ -1,0 +1,14 @@
+node_modules/
+.pnpm-store/
+.next/
+dist/
+build/
+.turbo/
+.env
+.env.local
+__pycache__/
+.venv/
+venv/
+model_weights/
+.DS_Store
+coverage/
