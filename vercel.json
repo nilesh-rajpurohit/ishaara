@@ -1,1 +1,1 @@
-{"installCommand":"pnpm install --no-frozen-lockfile","buildCommand":"pnpm --filter @ishaara/web build","outputDirectory":"apps/web/.next","framework":"nextjs"}
+{"installCommand":"pnpm install --no-frozen-lockfile","buildCommand":"next build","outputDirectory":".next","framework":"nextjs"}
