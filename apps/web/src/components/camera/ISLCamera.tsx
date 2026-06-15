@@ -9,7 +9,7 @@ interface ISLCameraProps {
 export const ISLCamera = ({ onGestureDetected }: ISLCameraProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { isLoaded, landmarks, error, initMediaPipe, stopDetection } = useMediaPipe(videoRef);
+  const { isLoaded, landmarks, error, initMediaPipe, stopDetection } = useMediaPipe(videoRef.current);
   const [isActive, setIsActive] = useState(false);
 
   useEffect(() => {
