@@ -9,261 +9,207 @@ interface Landmark {
   z: number;
 }
 
-// ─── Core distance helper ────────────────────────────────────────────────────
 const dist = (a: Landmark, b: Landmark): number =>
   Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
 
 const dist2D = (a: Landmark, b: Landmark): number =>
   Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 
-// ─── Finger state helpers ────────────────────────────────────────────────────
-// Returns true if a finger is extended (tip is farther from MCP than PIP is)
+// Is finger extended? Tip must be further from wrist than pip
 const up = (lm: Landmark[], tip: number, pip: number, mcp: number): boolean =>
-  dist(lm[tip], lm[mcp]) > dist(lm[pip], lm[mcp]) * 1.1;
+  dist(lm[tip], lm[0]) > dist(lm[pip], lm[0]) * 1.05;
 
-// Thumb is extended when tip is far from its base (landmark 2)
+// Thumb extended check
 const thumbUp = (lm: Landmark[]): boolean =>
   dist(lm[4], lm[2]) > dist(lm[3], lm[2]) * 1.1;
 
-// Fingertip-to-fingertip proximity (normalised to hand size)
-const close = (lm: Landmark[], a: number, b: number, ratio: number, H: number): boolean =>
-  dist(lm[a], lm[b]) < H * ratio;
+// Normalised hand scale
+const handScale = (lm: Landmark[]): number => dist(lm[0], lm[9]);
 
-// ─── Single-hand classifier ──────────────────────────────────────────────────
+// Tips close relative to hand scale
+const near = (lm: Landmark[], a: number, b: number, ratio: number): boolean =>
+  dist(lm[a], lm[b]) < handScale(lm) * ratio;
+
 export const classifyISLLetter = (lm: Landmark[]): ClassificationResult => {
   if (!lm || lm.length < 21) return { letter: "", confidence: 0 };
 
-  // Named booleans for each finger
-  const T  = thumbUp(lm);
-  const I  = up(lm, 8,  6,  5);   // Index
-  const M  = up(lm, 12, 10, 9);   // Middle
-  const R  = up(lm, 16, 14, 13);  // Ring
-  const P  = up(lm, 20, 18, 17);  // Pinky
+  const T = thumbUp(lm);
+  const I = up(lm, 8,  6,  5);
+  const M = up(lm, 12, 10, 9);
+  const R = up(lm, 16, 14, 13);
+  const P = up(lm, 20, 18, 17);
 
-  // Hand size reference (wrist → index MCP × 3 for proportional thresholds)
-  const H = dist(lm[0], lm[5]) * 3;
+  const H  = handScale(lm);
+  const tT = lm[4];
+  const iT = lm[8];
+  const mT = lm[12];
+  const rT = lm[16];
+  const pT = lm[20];
 
-  // Tip references
-  const tTip = lm[4];   // Thumb
-  const iTip = lm[8];   // Index
-  const mTip = lm[12];  // Middle
-  const rTip = lm[16];  // Ring
-  const pTip = lm[20];  // Pinky
+  // ISL A — both hands fists together (single hand: closed fist, thumb up side)
+  if (!I && !M && !R && !P && T && !near(lm, 4, 8, 0.4))
+    return { letter: "A", confidence: 0.88 };
 
-  // ── Numbers 0-9 ────────────────────────────────────────────────────────────
+  // ISL B — four fingers up, thumb tucked; fingers together
+  if (I && M && R && P && !T && dist2D(iT, pT) < H * 1.2)
+    return { letter: "B", confidence: 0.90 };
 
-  // 0 — all fingers curled into a circle touching thumb
+  // ISL C — curved hand, C shape (thumb + index form arc)
   if (!I && !M && !R && !P && !T
-    && close(lm, 4, 8, 0.30, H)
-    && dist(tTip, mTip) < H * 0.45
-  ) return { letter: "0", confidence: 0.85 };
+    && near(lm, 4, 8, 0.8) && dist(tT, iT) > H * 0.3)
+    return { letter: "C", confidence: 0.80 };
 
-  // 1 — index only, others folded
-  if (I && !M && !R && !P && !T)
-    return { letter: "1", confidence: 0.91 };
+  // ISL D — index up, thumb touches middle (single hand)
+  if (I && !M && !R && !P && near(lm, 4, 12, 0.5))
+    return { letter: "D", confidence: 0.84 };
 
-  // 2 — index + middle up, spread (peace/V)
-  if (I && M && !R && !P && !T && dist2D(iTip, mTip) > H * 0.15)
-    return { letter: "2", confidence: 0.88 };
+  // ISL E — all fingers bent/curled, thumb tucked
+  if (!I && !M && !R && !P && !T && !near(lm, 4, 8, 0.4))
+    return { letter: "E", confidence: 0.76 };
 
-  // 3 — index + middle + ring up
-  if (I && M && R && !P && !T)
-    return { letter: "3", confidence: 0.87 };
+  // ISL F — index + thumb pinch, other 3 up
+  if (!I && M && R && P && near(lm, 4, 8, 0.35))
+    return { letter: "F", confidence: 0.84 };
 
-  // 4 — all fingers up, thumb folded
-  if (I && M && R && P && !T)
-    return { letter: "4", confidence: 0.90 };
-
-  // 5 — all five up (open hand) — LAST resort so it doesn't swallow everything
-  if (I && M && R && P && T)
-    return { letter: "5", confidence: 0.88 };
-
-  // 6 — thumb + pinky touch, others extended
-  if (I && M && R && !P && T && close(lm, 4, 20, 0.30, H))
-    return { letter: "6", confidence: 0.83 };
-
-  // 7 — thumb + ring touch, others extended
-  if (I && M && !R && P && T && close(lm, 4, 16, 0.30, H))
-    return { letter: "7", confidence: 0.83 };
-
-  // 8 — thumb + middle touch, index extended
-  if (I && !M && !R && P && T && close(lm, 4, 12, 0.30, H))
-    return { letter: "8", confidence: 0.83 };
-
-  // 9 — thumb + index form ring, middle/ring/pinky curled
-  if (!I && !M && !R && !P && close(lm, 4, 8, 0.28, H) && T)
-    return { letter: "9", confidence: 0.82 };
-
-  // ── Letters A-Z ────────────────────────────────────────────────────────────
-
-  // A — fist, thumb to the side (not touching fingers)
-  if (!I && !M && !R && !P && T
-    && !close(lm, 4, 8, 0.30, H)
-  ) return { letter: "A", confidence: 0.90 };
-
-  // B — four fingers up, thumb tucked across palm
-  if (I && M && R && P && !T)
-    return { letter: "B", confidence: 0.92 };
-
-  // C — curved open hand, thumb and index form C shape
-  if (!I && !M && !R && !P && !T
-    && close(lm, 4, 8, 0.65, H)
-    && dist(tTip, iTip) > H * 0.18
-  ) return { letter: "C", confidence: 0.80 };
-
-  // D — index up, thumb touches middle tip, ring+pinky folded
-  if (I && !M && !R && !P && close(lm, 4, 12, 0.35, H))
-    return { letter: "D", confidence: 0.85 };
-
-  // E — all fingers curled, thumb tucked under fingers
-  if (!I && !M && !R && !P && !T
-    && !close(lm, 4, 8, 0.30, H)
-  ) return { letter: "E", confidence: 0.78 };
-
-  // F — index + thumb pinch, middle/ring/pinky extended
-  if (!I && M && R && P && close(lm, 4, 8, 0.28, H))
-    return { letter: "F", confidence: 0.85 };
-
-  // G — index points sideways, thumb parallel, others folded
+  // ISL G — index + thumb horizontal pointing sideways
   if (I && !M && !R && !P && T
-    && Math.abs(iTip.y - lm[5].y) < H * 0.25
-    && iTip.x > lm[5].x   // index pointing sideways
-  ) return { letter: "G", confidence: 0.80 };
+    && Math.abs(iT.y - lm[5].y) < H * 0.4
+    && dist2D(iT, tT) > H * 0.5)
+    return { letter: "G", confidence: 0.80 };
 
-  // H — index + middle pointing horizontal together
+  // ISL H — index + middle horizontal side by side
   if (I && M && !R && !P && !T
-    && Math.abs(iTip.y - lm[5].y) < H * 0.35
-    && dist2D(iTip, mTip) < H * 0.18
-  ) return { letter: "H", confidence: 0.82 };
+    && Math.abs(iT.y - lm[5].y) < H * 0.5
+    && dist2D(iT, mT) < H * 0.4)
+    return { letter: "H", confidence: 0.81 };
 
-  // I — pinky only up
+  // ISL I — pinky only up
   if (!I && !M && !R && P && !T)
     return { letter: "I", confidence: 0.90 };
 
-  // J — pinky up + thumb out (same as I but J has motion — static = I, flag as J if thumb out)
-  if (!I && !M && !R && P && T)
-    return { letter: "Y", confidence: 0.90 };   // Y is same static shape as J in many ISL variants — keep Y
-
-  // K — index + middle up, thumb between them touching middle
-  if (I && M && !R && !P && T && close(lm, 4, 12, 0.40, H))
+  // ISL J — pinky up + thumb out (same static as Y in many charts, treat separately by J = pinky only + motion, static = I)
+  // ISL K — index + middle up, thumb between them touching middle PIP
+  if (I && M && !R && !P && T && near(lm, 4, 12, 0.55))
     return { letter: "K", confidence: 0.78 };
 
-  // L — index up, thumb out at right angle (L shape)
+  // ISL L — index up + thumb out horizontal (L shape)
   if (I && !M && !R && !P && T
-    && iTip.y < lm[5].y    // index pointing up
-    && Math.abs(tTip.y - lm[5].y) < H * 0.35  // thumb horizontal
-  ) return { letter: "L", confidence: 0.88 };
+    && iT.y < lm[5].y
+    && Math.abs(tT.y - lm[2].y) < H * 0.5)
+    return { letter: "L", confidence: 0.87 };
 
-  // M — three fingers (index+middle+ring) folded over tucked thumb
+  // ISL M — three fingers (index+middle+ring) over tucked thumb
   if (!I && !M && !R && !P && !T
-    && close(lm, 4, 8, 0.50, H)    // thumb near index
-    && close(lm, 4, 12, 0.55, H)   // thumb near middle  
-  ) return { letter: "M", confidence: 0.75 };
+    && near(lm, 4, 8, 0.55) && near(lm, 4, 12, 0.6))
+    return { letter: "M", confidence: 0.74 };
 
-  // N — two fingers (index+middle) folded over tucked thumb
+  // ISL N — index + middle folded, thumb between index+middle
   if (!I && !M && !R && !P && !T
-    && close(lm, 4, 8, 0.38, H)
-    && !close(lm, 4, 12, 0.38, H)
-  ) return { letter: "N", confidence: 0.75 };
+    && near(lm, 4, 8, 0.42) && !near(lm, 4, 12, 0.42))
+    return { letter: "N", confidence: 0.74 };
 
-  // O — all fingertips meet thumb in O shape
+  // ISL O — all fingertips meet, forming O
   if (!I && !M && !R && !P
-    && close(lm, 4, 8, 0.30, H)
-    && close(lm, 4, 12, 0.35, H)
-    && close(lm, 4, 16, 0.40, H)
-  ) return { letter: "O", confidence: 0.83 };
+    && near(lm, 4, 8, 0.38) && near(lm, 4, 12, 0.45) && near(lm, 4, 16, 0.50))
+    return { letter: "O", confidence: 0.83 };
 
-  // P — index + middle point down, thumb out
-  if (I && M && !R && !P && T
-    && iTip.y > lm[5].y     // index pointing downward
-  ) return { letter: "P", confidence: 0.78 };
+  // ISL P — index + middle pointing down, thumb out
+  if (I && M && !R && !P && T && iT.y > lm[5].y)
+    return { letter: "P", confidence: 0.78 };
 
-  // Q — index + thumb point down, others folded
+  // ISL Q — index + thumb pointing down
   if (I && !M && !R && !P && T
-    && iTip.y > lm[5].y
-    && tTip.y > lm[2].y
-  ) return { letter: "Q", confidence: 0.76 };
+    && iT.y > lm[5].y && tT.y > lm[2].y)
+    return { letter: "Q", confidence: 0.76 };
 
-  // R — index + middle crossed (index over middle)
+  // ISL R — index + middle crossed
   if (I && M && !R && !P && !T
-    && iTip.x < mTip.x      // index crosses over middle (mirrored camera)
-    && close(lm, 8, 12, 0.20, H)
-  ) return { letter: "R", confidence: 0.80 };
+    && Math.abs(iT.x - mT.x) < H * 0.15
+    && dist2D(iT, mT) < H * 0.3)
+    return { letter: "R", confidence: 0.80 };
 
-  // S — fist with thumb over fingers
-  if (!I && !M && !R && !P && !T
-    && tTip.y > iTip.y     // thumb rests over knuckles
-  ) return { letter: "S", confidence: 0.78 };
+  // ISL S — fist with thumb over fingers
+  if (!I && !M && !R && !P && !T && near(lm, 4, 8, 0.55))
+    return { letter: "S", confidence: 0.77 };
 
-  // T — thumb between index and middle
-  if (!I && !M && !R && !P && T
-    && close(lm, 4, 8, 0.35, H)
-    && tTip.y > iTip.y
-  ) return { letter: "T", confidence: 0.80 };
+  // ISL T — thumb between index + middle, index curled
+  if (!I && !M && !R && !P && T && near(lm, 4, 8, 0.4) && tT.y > lm[5].y)
+    return { letter: "T", confidence: 0.79 };
 
-  // U — index + middle together pointing up
-  if (I && M && !R && !P && !T && dist2D(iTip, mTip) < H * 0.15)
+  // ISL U — index + middle up together (close, parallel)
+  if (I && M && !R && !P && !T && dist2D(iT, mT) < H * 0.3)
     return { letter: "U", confidence: 0.86 };
 
-  // V — index + middle spread (peace sign)
-  if (I && M && !R && !P && !T && dist2D(iTip, mTip) >= H * 0.15)
-    return { letter: "V", confidence: 0.88 };
+  // ISL V — index + middle up spread (peace)
+  if (I && M && !R && !P && !T && dist2D(iT, mT) >= H * 0.3)
+    return { letter: "V", confidence: 0.87 };
 
-  // W — index + middle + ring up, spread
+  // ISL W — index + middle + ring up spread
   if (I && M && R && !P && !T)
-    return { letter: "W", confidence: 0.87 };
+    return { letter: "W", confidence: 0.86 };
 
-  // X — index hooked / crooked
-  if (I && !M && !R && !P && !T
-    && dist(iTip, lm[5]) < H * 0.60   // tip pulled back toward palm
-  ) return { letter: "X", confidence: 0.75 };
+  // ISL X — index + thumb crossed/hooked (both hands)
+  if (I && !M && !R && !P && !T && near(lm, 8, 5, 0.6))
+    return { letter: "X", confidence: 0.74 };
 
-  // Y — thumb + pinky out (shaka)
+  // ISL Y — thumb + pinky out (shaka)
   if (!I && !M && !R && P && T)
-    return { letter: "Y", confidence: 0.90 };
+    return { letter: "Y", confidence: 0.89 };
 
-  // Z — index only (same as 1 but Z has motion — static we return 1; 
-  //     include here only if 1 didn't fire, shouldn't reach here)
+  // ISL Z — index only, drawing Z (static: same as 1/index up — treat as index pointing with slight curve)
+  // Numbers
+  if (I && M && R && P && T)
+    return { letter: "5", confidence: 0.88 };
+
+  if (I && M && R && P && !T)
+    return { letter: "4", confidence: 0.88 };
+
+  if (I && M && R && !P && !T)
+    return { letter: "3", confidence: 0.87 };
+
+  if (I && M && !R && !P && !T && dist2D(iT, mT) > H * 0.3)
+    return { letter: "2", confidence: 0.87 };
+
+  if (I && !M && !R && !P && !T)
+    return { letter: "1", confidence: 0.90 };
 
   return { letter: "?", confidence: 0.30 };
 };
 
-// ─── Two-hand classifier ─────────────────────────────────────────────────────
-// Only invoked when MediaPipe confidently detects EXACTLY 2 hands
 export const classifyTwoHands = (
   hand1: Landmark[],
   hand2: Landmark[],
-  handedness?: string[]  // "Left" | "Right" from MediaPipe
 ): ClassificationResult => {
   if (!hand1 || !hand2 || hand1.length < 21 || hand2.length < 21)
     return classifyISLLetter(hand1);
 
-  // Use 2D for cross-hand distances (they're in the same camera plane)
-  const d = (a: Landmark, b: Landmark) =>
+  const d2 = (a: Landmark, b: Landmark) =>
     Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 
-  const wristDist = d(hand1[0], hand2[0]);
-
-  // Only attempt two-hand signs if hands are close enough to actually interact
-  // (if they're far apart, the second "hand" is likely a false positive)
-  if (wristDist > 0.55) {
+  // Guard: if wrists far apart, second hand is a false positive
+  if (d2(hand1[0], hand2[0]) > 0.55)
     return classifyISLLetter(hand1);
-  }
 
-  const h1i = hand1[8],  h2i = hand2[8];   // Index tips
-  const h1t = hand1[4],  h2t = hand2[4];   // Thumb tips
-  const h1m = hand1[12], h2m = hand2[12];  // Middle tips
+  const h1i = hand1[8], h2i = hand2[8];
+  const h1t = hand1[4], h2t = hand2[4];
 
-  const indexTouching  = d(h1i, h2i) < 0.06;
-  const thumbTouching  = d(h1t, h2t) < 0.06;
-  const indexThumbCross = d(h1i, h2t) < 0.06 || d(h2i, h1t) < 0.06;
-  const middleTouching = d(h1m, h2m) < 0.06;
+  // ISL A — both hands closed fists together
+  const T1 = thumbUp(hand1), T2 = thumbUp(hand2);
+  const I1 = up(hand1, 8, 6, 5), I2 = up(hand2, 8, 6, 5);
+  const M1 = up(hand1, 12, 10, 9), M2 = up(hand2, 12, 10, 9);
+  const R1 = up(hand1, 16, 14, 13);
+  const P1 = up(hand1, 20, 18, 17), P2 = up(hand2, 20, 18, 17);
 
-  if (indexTouching && thumbTouching)  return { letter: "N", confidence: 0.85 };
-  if (indexTouching && middleTouching) return { letter: "R", confidence: 0.82 };
-  if (thumbTouching)                   return { letter: "T", confidence: 0.80 };
-  if (indexThumbCross)                 return { letter: "X", confidence: 0.78 };
+  if (!I1 && !M1 && !R1 && !P1 && !I2 && !M2 && !P2)
+    return { letter: "A", confidence: 0.88 };
 
-  // Fall back to single-hand classification on dominant hand
+  // ISL X — index fingers crossed
+  if (I1 && !M1 && I2 && !M2 && d2(h1i, h2i) < 0.08)
+    return { letter: "X", confidence: 0.82 };
+
+  // ISL R — hands crossing
+  if (d2(h1i, h2t) < 0.07 || d2(h2i, h1t) < 0.07)
+    return { letter: "R", confidence: 0.80 };
+
   return classifyISLLetter(hand1);
 };
