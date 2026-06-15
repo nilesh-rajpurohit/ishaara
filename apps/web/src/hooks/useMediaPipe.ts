@@ -14,7 +14,7 @@ export interface MediaPipeState {
   error: string | null;
 }
 
-export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement>) => {
+export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>) => {
   const [state, setState] = useState<MediaPipeState>({
     isLoaded: false,
     isDetecting: false,
