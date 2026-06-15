@@ -1,1 +1,1 @@
-{"extends":"@ishaara/config/tsconfig/node","compilerOptions":{"outDir":"dist","rootDir":"src","paths":{"@/*":["./src/*"]}},"include":["src/**/*.ts"],"exclude":["node_modules","dist"]}
+{"compilerOptions":{"target":"ES2022","module":"CommonJS","moduleResolution":"Node","outDir":"dist","rootDir":"src","esModuleInterop":true,"allowSyntheticDefaultImports":true,"strict":false,"skipLibCheck":true,"resolveJsonModule":true},"include":["src/**/*.ts"],"exclude":["node_modules","dist"]}

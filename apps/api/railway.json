@@ -1,0 +1,1 @@
+{"build":{"builder":"NIXPACKS","buildCommand":"cd apps/api && npm install && npm run build && npx prisma generate"},"deploy":{"startCommand":"cd apps/api && npm start","restartPolicyType":"ON_FAILURE"}}
