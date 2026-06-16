@@ -47,17 +47,8 @@ const ISL_SIGNS: Record<string, { gesture: string; desc: string; hands: 1 | 2 }>
   "9": { gesture: "👌", desc: "Thumb+index circle, others curled", hands: 1 },
 };
 
-const TWO_HAND_LETTERS = Object.entries(ISL_SIGNS)
-  .filter(([, v]) => v.hands === 2)
-  .map(([k]) => k);
-
-const ONE_HAND_LETTERS = Object.entries(ISL_SIGNS)
-  .filter(([, v]) => v.hands === 1 && isNaN(Number(k)))
-  .map(([k]) => k);
-
 const NUMBERS = ["0","1","2","3","4","5","6","7","8","9"];
 
-// Get all sign keys in order
 const ALL_KEYS = [
   ...Object.keys(ISL_SIGNS).filter(k => isNaN(Number(k))).sort(),
   ...NUMBERS,
